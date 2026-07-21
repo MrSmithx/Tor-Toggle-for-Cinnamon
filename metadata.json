@@ -1,7 +1,7 @@
 {
     "uuid": "tor-toggle@martyn",
     "name": "Tor Toggle",
-    "description": "Enable or disable the Tor service",
+    "description": "Enable or Disable the Tor Service",
     "max-instances": 1
 }
 

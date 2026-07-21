@@ -2,6 +2,7 @@ const Applet = imports.ui.applet;
 const PopupMenu = imports.ui.popupMenu;
 const Util = imports.misc.util;
 const GLib = imports.gi.GLib;
+const Gio = imports.gi.Gio;
 
 class TorApplet extends Applet.IconApplet {
 
@@ -14,81 +15,105 @@ class TorApplet extends Applet.IconApplet {
         this.menu = new Applet.AppletPopupMenu(this, orientation);
 
         this.menuManager.addMenu(this.menu);
+        this.metadata = metadata;
+
+        this.proxySettings = new Gio.Settings({
+            schema: "org.gnome.system.proxy"
+        });
+
+        this.socksSettings = new Gio.Settings({
+            schema: "org.gnome.system.proxy.socks"
+        });
 
         this.refresh();
 
-        GLib.timeout_add_seconds(
+        this._refreshTimer = GLib.timeout_add_seconds(
             GLib.PRIORITY_DEFAULT,
             5,
             () => {
                 this.refresh();
-                return true;
+                return GLib.SOURCE_CONTINUE;
             }
         );
     }
 
     on_applet_clicked() {
-        global.log("Tor applet clicked");
+        if (this._busy)
+            return;
+
         this.toggleTor();
     }
+
 
     isRunning(callback) {
         Util.spawnCommandLineAsyncIO(
             "systemctl is-active tor",
             (stdout, stderr, exitCode) => {
-                callback(stdout.trim() === "active");
+                callback(exitCode === 0);
             }
         );
     }
 
+    setState(running) {
+        this.set_applet_icon_path(
+            `${this.metadata.path}/tor_${running ? "connected" : "disconnected"}.png`
+        );
+
+        this.set_applet_tooltip(
+            running ? "Tor: Enabled" : "Tor: Disabled"
+        );
+    }
+
     refresh() {
-        this.isRunning((running) => {
-            if (running) {
-                this.set_applet_icon_name("network-vpn-symbolic");
-                this.set_applet_tooltip("Tor: Enabled");
-            } else {
-                this.set_applet_icon_name("network-offline-symbolic");
-                this.set_applet_tooltip("Tor: Disabled");
-            }
-        });
+        this.isRunning(running => this.setState(running));
+    }
+
+    enableProxy() {
+        this.proxySettings.set_string("mode", "manual");
+        this.socksSettings.set_string("host", "127.0.0.1");
+        this.socksSettings.set_int("port", 9050);
+    }
+
+    disableProxy() {
+        this.proxySettings.set_string("mode", "none");
     }
 
     toggleTor() {
-        this.isRunning((running) => {
-            let cmd;
+        this._busy = true;
 
-            if (running) {
-                cmd = `
-                    pkexec systemctl stop tor &&
-                    gsettings set org.gnome.system.proxy mode 'none'
-                `.replace(/\s+/g, " ");
-            } else {
-                cmd = `
-                    pkexec systemctl start tor &&
-                    gsettings set org.gnome.system.proxy mode 'manual' &&
-                    gsettings set org.gnome.system.proxy.socks host '127.0.0.1' &&
-                    gsettings set org.gnome.system.proxy.socks port 9050
-                `.replace(/\s+/g, " ");
-            }
+        this.isRunning((running) => {
+            const cmd = running
+                ? "pkexec systemctl stop tor"
+                : "pkexec systemctl start tor";
 
             Util.spawnCommandLineAsyncIO(
                 cmd,
                 (stdout, stderr, exitCode) => {
-                    global.log(`exit=${exitCode}`);
-                    global.log(`stdout=${stdout}`);
-                    global.log(`stderr=${stderr}`);
-                }
-            );
+                    this._busy = false;
 
-            GLib.timeout_add_seconds(
-                GLib.PRIORITY_DEFAULT,
-                1,
-                () => {
+                    if (exitCode !== 0) {
+                        global.logError(stderr);
+                        this.refresh();
+                        return;
+                    }
+
+                    if (running) {
+                        this.disableProxy();
+                    } else {
+                        this.enableProxy();
+                    }
+
                     this.refresh();
-                    return GLib.SOURCE_REMOVE;
                 }
             );
         });
+    }
+
+    on_applet_removed_from_panel() {
+        if (this._refreshTimer) {
+            GLib.Source.remove(this._refreshTimer);
+            this._refreshTimer = 0;
+        }
     }
 }
 
