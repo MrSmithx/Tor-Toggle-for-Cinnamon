@@ -1,7 +1,7 @@
 {
     "uuid": "tor-toggle@martyn",
     "name": "Tor Toggle",
-    "description": "Enable or Disable the Tor Service",
+    "description": "Enable or Disable the Tor Service\n\nhttps://github.com/MrSmithx/Tor-Toggle-for-Cinnamon",
     "max-instances": 1
 }
 
