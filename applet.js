@@ -367,6 +367,8 @@ class TorApplet extends Applet.IconApplet {
 
                 this.setState(running);
 
+                this.updateExitInfo();
+
             });
 
         });
@@ -535,7 +537,11 @@ class TorApplet extends Applet.IconApplet {
                                     "Tor replied: " + line
                                 );
 
-                                this.exitInfo.label.text =
+                                this.exitCountry.label.text =
+                                    "Exit : Changing...";
+                                this.exitCity.label.text =
+                                    "Exit : Changing...";
+                                this.exitIP.label.text =
                                     "Exit : Changing...";
 
                                 GLib.timeout_add_seconds(
@@ -553,7 +559,11 @@ class TorApplet extends Applet.IconApplet {
 
                                 global.logError(e);
 
-                                this.exitInfo.label.text =
+                                this.exitCounry.label.text =
+                                    "Exit : Identity Change Failed";
+                                this.exitCity.label.text =
+                                    "Exit : Identity Change Failed";
+                                this.exitIP.label.text =
                                     "Exit : Identity Change Failed";
                             }
 
@@ -565,7 +575,11 @@ class TorApplet extends Applet.IconApplet {
 
                     global.logError(e);
 
-                    this.exitInfo.label.text =
+                    this.exitCountry.label.text =
+                        "Exit : Unable to Connect";
+                    this.exitCity.label.text =
+                        "Exit : Unable to Connect";
+                    this.exitIP.label.text =
                         "Exit : Unable to Connect";
                 }
             }
