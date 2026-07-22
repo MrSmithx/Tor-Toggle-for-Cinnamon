@@ -5,7 +5,16 @@ const GLib = imports.gi.GLib;
 const Gio = imports.gi.Gio;
 const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
-const ByteArray = imports.byteArray;
+const Settings = imports.ui.settings;
+
+const ICONS = {
+    TOR_ON: "org.x.Warpinator-symbolic",
+    TOR_OFF: "org.x.Warpinator-error-symbolic",
+    ERROR: "dialog-error-symbolic",
+    WARNING: "dialog-warning-symbolic",
+    PROXY_ON: "network-transmit-receive-symbolic",
+    PROXY_OFF: "network-error-symbolic"
+};
 
 class TorApplet extends Applet.IconApplet {
 
@@ -16,6 +25,55 @@ class TorApplet extends Applet.IconApplet {
         this._busy = false;
 
         this.setAllowedLayout(Applet.AllowedLayout.BOTH);
+
+        this.settings = new Settings.AppletSettings(
+            this,
+            metadata.uuid,
+            instanceId
+        );
+
+        this.settings.bind(
+            "showCountry",
+            "showCountry",
+            this.updateMenuVisibility.bind(this)
+        );
+
+        this.settings.bind(
+            "showCity",
+            "showCity",
+            this.updateMenuVisibility.bind(this)
+        );
+
+        this.settings.bind(
+            "showIP",
+            "showIP",
+            this.updateMenuVisibility.bind(this)
+        );
+
+        this.settings.bind(
+            "tor-host",
+            "torHost"
+        );
+
+        this.settings.bind(
+            "socks-port",
+            "socksPort"
+        );
+
+        this.settings.bind(
+            "control-port",
+            "controlPort"
+        );
+
+        this.settings.bind(
+            "refresh-interval",
+            "refreshInterval"
+        );
+
+        this.settings.bind(
+            "auto-proxy",
+            "autoProxy"
+        );
 
         this.menuManager = new PopupMenu.PopupMenuManager(this);
         this.menu = new Applet.AppletPopupMenu(this, orientation);
@@ -37,7 +95,7 @@ class TorApplet extends Applet.IconApplet {
 
         this._refreshTimer = GLib.timeout_add_seconds(
             GLib.PRIORITY_DEFAULT,
-            15,
+            this.refreshInterval,
             () => {
                 this.refresh();
                 return GLib.SOURCE_CONTINUE;
@@ -59,13 +117,62 @@ class TorApplet extends Applet.IconApplet {
             new PopupMenu.PopupSeparatorMenuItem()
         );
 
+        this.statusTitle = new PopupMenu.PopupIconMenuItem(
+            "Tor Status : Checking...",
+            ICONS.TOR_OFF,
+            St.IconType.SYMBOLIC
+        );
+
+        this.statusTitle.setSensitive(false);
+        this.menu.addMenuItem(this.statusTitle);
+
+        this.proxyStatus = new PopupMenu.PopupIconMenuItem(
+            "System Proxy : Disabled",
+            ICONS.PROXY_OFF,
+            St.IconType.SYMBOLIC
+        );
+
+        this.proxyStatus.setSensitive(false);
+        this.menu.addMenuItem(this.proxyStatus);
+
+        this.exitCountry = new PopupMenu.PopupIconMenuItem(
+            "Exit Country : Checking...",
+            "mark-location-symbolic",
+            St.IconType.SYMBOLIC
+        );
+
+        this.exitCountry.setSensitive(false);
+        this.menu.addMenuItem(this.exitCountry);
+
+        this.exitCity = new PopupMenu.PopupIconMenuItem(
+            "Exit City : Checking...",
+            "find-location-symbolic",
+            St.IconType.SYMBOLIC
+        );
+
+        this.exitCity.setSensitive(false);
+        this.menu.addMenuItem(this.exitCity);
+
+        this.exitIP = new PopupMenu.PopupIconMenuItem(
+            "Exit IP Address : Checking...",
+            "xsi-network-server-symbolic",
+            St.IconType.SYMBOLIC
+        );
+
+        this.exitIP.setSensitive(false);
+        this.menu.addMenuItem(this.exitIP);
+
+        this.menu.addMenuItem(
+            new PopupMenu.PopupSeparatorMenuItem()
+        );
+
         this.torSwitch = new PopupMenu.PopupSwitchMenuItem(
             "Tor Network",
             false
         );
 
         this.proxySwitch = new PopupMenu.PopupSwitchMenuItem(
-            "System-Wide Proxy",
+            "System Proxy",
             false
         );
 
@@ -76,41 +183,47 @@ class TorApplet extends Applet.IconApplet {
             new PopupMenu.PopupSeparatorMenuItem()
         );
 
-        this.statusTitle = new PopupMenu.PopupMenuItem(
-            "Status : Checking...",
-            { reactive: false }
+        this.newIdentityButton = new PopupMenu.PopupIconMenuItem(
+            _("New Identity"), "view-refresh-symbolic", St.IconType.SYMBOLIC);
+
+        this.menu.addMenuItem(this.newIdentityButton);
+
+        this.testConnectionButton = new PopupMenu.PopupIconMenuItem(
+            _("Test Tor Connection"),
+            "network-workgroup-symbolic",
+            St.IconType.SYMBOLIC
         );
 
-        this.proxyStatus = new PopupMenu.PopupMenuItem(
-            "Proxy : Disabled",
-            { reactive: false }
+        this.menu.addMenuItem(this.testConnectionButton);
+
+        this.testConnectionButton.connect(
+            "activate",
+            () => {
+                this.testTorConnection();
+            }
         );
 
-        this.menu.addMenuItem(this.statusTitle);
-        this.menu.addMenuItem(this.proxyStatus);
+        this.testStatus = new PopupMenu.PopupIconMenuItem(
+            "Test : Not Run",
+            "xsi-network-wireless-hotspot-symbolic",
+            St.IconType.SYMBOLIC
+        );
+
+        this.testStatus.setSensitive(false);
+        this.menu.addMenuItem(this.testStatus);
 
         this.menu.addMenuItem(
             new PopupMenu.PopupSeparatorMenuItem()
         );
 
-        this.newIdentityButton = new PopupMenu.PopupIconMenuItem(
-            _("New Identity"), "view-refresh-symbolic", St.IconType.SYMBOLIC);
+        this.settingsButton =
+            new PopupMenu.PopupIconMenuItem(
+                _("Preferences"),
+                "emblem-system-symbolic",
+                St.IconType.SYMBOLIC
+            );
 
-        this.exitInfo = new PopupMenu.PopupMenuItem(
-            "Exit : Checking...",
-            { reactive: false }
-        );
-
-        this.menu.addMenuItem(this.newIdentityButton);
-        this.menu.addMenuItem(this.exitInfo);
-
-
-        this.newIdentityButton.connect(
-            "activate",
-            () => {
-                this.newIdentity();
-            }
-        );
+        this.menu.addMenuItem(this.settingsButton);
 
         this.torSwitch.connect(
             "toggled",
@@ -131,6 +244,34 @@ class TorApplet extends Applet.IconApplet {
                 this.refresh();
             }
         );
+
+        this.newIdentityButton.connect(
+            "activate",
+            () => {
+                this.newIdentity();
+            }
+        );
+
+        this.settingsButton.connect(
+            "activate",
+            () => {
+                this.openSettings();
+            }
+        );
+
+        this.updateMenuVisibility();
+    }
+
+    updateMenuVisibility() {
+        this.exitCountry.actor.visible = this.showCountry;
+        this.exitCity.actor.visible = this.showCity;
+        this.exitIP.actor.visible = this.showIP;
+    }
+
+    openSettings() {
+        Util.spawnCommandLine(
+            `xlet-settings applet ${this.metadata.uuid}`
+        );
     }
 
     on_applet_clicked() {
@@ -144,6 +285,11 @@ class TorApplet extends Applet.IconApplet {
                 callback(exitCode === 0);
             }
         );
+    }
+
+    torInstalled(callback) {
+        const torPath = GLib.find_program_in_path("tor");
+        callback(torPath !== null);
     }
 
     setState(running) {
@@ -163,10 +309,20 @@ class TorApplet extends Applet.IconApplet {
 
         if (this.statusTitle) {
 
-            this.statusTitle.label.text =
-                running
-                    ? "Status : 🟢 Tor Connected"
-                    : "Status : 🔴 Tor Disconnected";
+            if (running) {
+
+                this.statusTitle.label.text =
+                    "Tor Status : Connected";
+
+                this.statusTitle.setIconName(ICONS.TOR_ON);
+
+            } else {
+
+                this.statusTitle.label.text =
+                    "Tor Status : Disconnected";
+
+                this.statusTitle.setIconName(ICONS.TOR_OFF);
+            }
         }
     }
 
@@ -176,14 +332,42 @@ class TorApplet extends Applet.IconApplet {
 
     refresh() {
 
-        this.isRunning(running => {
+        this.torInstalled(installed => {
 
-            this.setState(running);
+            if (!installed) {
 
-            this.statusTitle.label.text =
-                running
-                    ? "Status : 🟢 Tor Connected"
-                    : "Status : 🔴 Tor Disconnected";
+                this.set_applet_icon_path(
+                    `${this.metadata.path}/tor_off.png`
+                );
+
+                this.set_applet_tooltip(
+                    "Tor : Not Installed"
+                );
+
+                this.statusTitle.label.text =
+                    "Tor Status : Not Installed";
+
+                this.statusTitle.setIconName(ICONS.ERROR);
+
+                this.torSwitch.setToggleState(false);
+                this.torSwitch.setSensitive(false);
+
+
+                this.proxyStatus.label.text =
+                    "System Proxy : Tor unavailable";
+
+                this.proxyStatus.setIconName(ICONS.WARNING);
+
+                return;
+            }
+
+            this.torSwitch.setSensitive(true);
+
+            this.isRunning(running => {
+
+                this.setState(running);
+
+            });
 
         });
 
@@ -191,19 +375,22 @@ class TorApplet extends Applet.IconApplet {
 
         this.proxySwitch.setToggleState(proxyEnabled);
 
-
         if (proxyEnabled) {
 
             const host = this.socksSettings.get_string("host");
             const port = this.socksSettings.get_int("port");
 
             this.proxyStatus.label.text =
-                `Proxy : ${host}:${port}`;
+                `System Proxy : ${host}:${port}`;
+
+            this.proxyStatus.setIconName(ICONS.PROXY_ON);
 
         } else {
 
             this.proxyStatus.label.text =
-                "Proxy : Disabled";
+                "System Proxy : Disabled";
+
+            this.proxyStatus.setIconName(ICONS.PROXY_OFF);
         }
     }
 
@@ -216,12 +403,12 @@ class TorApplet extends Applet.IconApplet {
 
         this.socksSettings.set_string(
             "host",
-            "127.0.0.1"
+            this.torHost
         );
 
         this.socksSettings.set_int(
             "port",
-            9050
+            this.socksPort
         );
     }
 
@@ -233,6 +420,17 @@ class TorApplet extends Applet.IconApplet {
     }
 
     toggleTor(enable) {
+
+        this.testStatus.label.text = "Test : Not Tested";
+
+        if (GLib.find_program_in_path("tor") === null) {
+
+            global.logError(
+                "Tor is not installed"
+            );
+
+            return;
+        }
 
         if (this._busy)
             return;
@@ -251,49 +449,136 @@ class TorApplet extends Applet.IconApplet {
 
                 if (exitCode !== 0) {
                     global.logError(stderr);
+                    return;
                 }
 
+                if (this.autoProxy) {
+                    if (enable)
+                        this.enableProxy();
+                    else
+                        this.disableProxy();
+                }
+
+                GLib.timeout_add_seconds(
+                    GLib.PRIORITY_DEFAULT,
+                    5,
+                    () => {
+
+                        this.updateExitInfo();
+
+                        return GLib.SOURCE_REMOVE;
+                    }
+                );
+
                 this.refresh();
-                this.updateExitInfo();
             }
         );
     }
 
     newIdentity() {
 
-        const cmd =
-            "bash -c \"printf 'AUTHENTICATE \\\"password\\\"\\r\\nSIGNAL NEWNYM\\r\\n' | nc 127.0.0.1 9051\"";
+        this.testStatus.label.text = "Test : Not Tested";
 
-        Util.spawnCommandLineAsyncIO(
-            cmd,
-            (stdout, stderr, exitCode) => {
+        const client = new Gio.SocketClient();
 
-                if (exitCode !== 0) {
+        const address = Gio.NetworkAddress.new(
+            this.torHost, this.controlPort);
 
-                    global.logError(
-                        "NEWNYM failed: " + stderr
+        client.connect_async(
+            address,
+            null,
+            (client, result) => {
+
+                global.log("Connect callback");
+
+                try {
+
+                    const connection =
+                        client.connect_finish(result);
+
+                    global.log("Connected to ControlPort");
+
+                    const output =
+                        connection.get_output_stream();
+
+                    const input =
+                        new Gio.DataInputStream({
+                            base_stream:
+                                connection.get_input_stream()
+                        });
+
+                    const command =
+                        'AUTHENTICATE "password"\r\n' +
+                        'SIGNAL NEWNYM\r\n' +
+                        'QUIT\r\n';
+
+                    output.write_all(
+                        command,
+                        null
                     );
 
+                    output.flush(null);
+
+                    global.log("Commands sent");
+
+                    input.read_line_async(
+                        GLib.PRIORITY_DEFAULT,
+                        null,
+                        (stream, res) => {
+
+                            try {
+
+                                const [line] =
+                                    stream.read_line_finish_utf8(res);
+
+                                global.log(
+                                    "Tor replied: " + line
+                                );
+
+                                this.exitInfo.label.text =
+                                    "Exit : Changing...";
+
+                                GLib.timeout_add_seconds(
+                                    GLib.PRIORITY_DEFAULT,
+                                    5,
+                                    () => {
+
+                                        this.updateExitInfo();
+
+                                        return GLib.SOURCE_REMOVE;
+                                    }
+                                );
+
+                            } catch (e) {
+
+                                global.logError(e);
+
+                                this.exitInfo.label.text =
+                                    "Exit : Identity Change Failed";
+                            }
+
+                            connection.close(null);
+
+                        });
+
+                } catch (e) {
+
+                    global.logError(e);
+
                     this.exitInfo.label.text =
-                        "Exit : Identity change failed";
-
-                    return;
+                        "Exit : Unable to Connect";
                 }
-
-                this.exitInfo.label.text =
-                    "Exit : Changing...";
             }
         );
-        this.updateExitInfo();
     }
 
     updateExitInfo() {
 
-        if (!this.exitInfo)
+        if (!this.exitIP)
             return;
 
         const cmd =
-            "curl --max-time 15 --silent --fail --proxy socks5h://127.0.0.1:9050 https://check.torproject.org/api/ip";
+           `curl --max-time 15 --silent --fail --proxy socks5h://${this.torHost}:${this.socksPort} ip-api.com/json/`;
 
         Util.spawnCommandLineAsyncIO(
             cmd,
@@ -309,7 +594,15 @@ class TorApplet extends Applet.IconApplet {
                         `Exit lookup failed (${exitCode}): ${stderr}`
                     );
 
-                    this.exitInfo.label.text = "Exit : Waiting...";
+                    this.exitCountry.label.text =
+                        "Exit Country : Waiting...";
+
+                    this.exitCity.label.text =
+                        "Exit City : Waiting...";
+
+                    this.exitIP.label.text =
+                        "Exit IP Address : Waiting...";
+
                     return;
                 }
 
@@ -318,11 +611,23 @@ class TorApplet extends Applet.IconApplet {
                     const data =
                         JSON.parse(stdout);
 
-                    const ip =
-                        data.IP || "Unknown";
+                    const country = 
+                        data.country || "Unknown";
 
-                    this.exitInfo.label.text =
-                        `Exit IP : (${ip})`;
+                    const city =
+                        data.city || "Unknown";
+
+                    const ip =
+                        data.query || "Unknown";
+
+                    this.exitCountry.label.text =
+                        `Exit Country : ${country}`;
+
+                    this.exitCity.label.text =
+                        `Exit City : ${city}`;
+
+                    this.exitIP.label.text =
+                        `Exit IP Address : ${ip}`;
 
                 } catch(e) {
 
@@ -330,8 +635,65 @@ class TorApplet extends Applet.IconApplet {
                         "Exit parse error: " + e
                     );
 
-                    this.exitInfo.label.text =
-                        "Exit : Unknown";
+                    this.exitCountry.label.text =
+                        `Exit Country : Unknown`;
+
+                    this.exitCity.label.text =
+                        `Exit City : Unknown`;
+
+                    this.exitIP.label.text =
+                        `Exit IP Address : Unknown`;
+                }
+            }
+        );
+    }
+
+    testTorConnection() {
+
+        this.testStatus.label.text = "Test : Testing...";
+
+        const cmd =
+            `curl --max-time 15 --silent --fail \
+            --proxy socks5h://${this.torHost}:${this.socksPort} \
+            https://check.torproject.org/api/ip`;
+
+        Util.spawnCommandLineAsyncIO(
+            cmd,
+            (stdout, stderr, exitCode) => {
+
+                if (exitCode !== 0 || !stdout) {
+
+                    global.logError(
+                        `Tor test failed (${exitCode}): ${stderr}`
+                    );
+
+                    this.testStatus.label.text =
+                        "Test : Unable to test connection";
+
+                    return;
+                }
+
+                try {
+
+                    const data = JSON.parse(stdout);
+
+                    if (data.IsTor) {
+
+                        this.testStatus.label.text =
+                            `Test : Tor OK (${data.IP})`;
+
+                    } else {
+
+                        this.testStatus.label.text =
+                            "Test : Traffic is NOT using Tor";
+                    }
+
+                } catch (e) {
+
+                    global.logError(e);
+
+                    this.testStatus.label.text =
+                        "Test : Invalid response";
                 }
             }
         );
@@ -341,8 +703,12 @@ class TorApplet extends Applet.IconApplet {
 
         if (this._refreshTimer) {
             GLib.Source.remove(this._refreshTimer);
-            this._refreshTimer = 0;
         }
+
+        this.settings.finalize();
+
+        this.proxySettings = null;
+        this.socksSettings = null;
     }
 }
 
