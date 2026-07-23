@@ -123,6 +123,7 @@ class TorApplet extends Applet.IconApplet {
             St.IconType.SYMBOLIC
         );
 
+        this.statusTitle.label.x_expand = true;
         this.statusTitle.setSensitive(false);
         this.menu.addMenuItem(this.statusTitle);
 
@@ -132,6 +133,7 @@ class TorApplet extends Applet.IconApplet {
             St.IconType.SYMBOLIC
         );
 
+        this.proxyStatus.label.x_expand = true;
         this.proxyStatus.setSensitive(false);
         this.menu.addMenuItem(this.proxyStatus);
 
@@ -141,6 +143,7 @@ class TorApplet extends Applet.IconApplet {
             St.IconType.SYMBOLIC
         );
 
+        this.exitCountry.label.x_expand = true;
         this.exitCountry.setSensitive(false);
         this.menu.addMenuItem(this.exitCountry);
 
@@ -150,6 +153,7 @@ class TorApplet extends Applet.IconApplet {
             St.IconType.SYMBOLIC
         );
 
+        this.exitCity.label.x_expand = true;
         this.exitCity.setSensitive(false);
         this.menu.addMenuItem(this.exitCity);
 
@@ -159,6 +163,7 @@ class TorApplet extends Applet.IconApplet {
             St.IconType.SYMBOLIC
         );
 
+        this.exitIP.label.x_expand = true;
         this.exitIP.setSensitive(false);
         this.menu.addMenuItem(this.exitIP);
 
@@ -171,12 +176,13 @@ class TorApplet extends Applet.IconApplet {
             false
         );
 
+        this.menu.addMenuItem(this.torSwitch);
+
         this.proxySwitch = new PopupMenu.PopupSwitchMenuItem(
             "System Proxy",
             false
         );
 
-        this.menu.addMenuItem(this.torSwitch);
         this.menu.addMenuItem(this.proxySwitch);
 
         this.menu.addMenuItem(
@@ -352,11 +358,13 @@ class TorApplet extends Applet.IconApplet {
                 this.torSwitch.setToggleState(false);
                 this.torSwitch.setSensitive(false);
 
-
                 this.proxyStatus.label.text =
                     "System Proxy : Tor unavailable";
 
                 this.proxyStatus.setIconName(ICONS.WARNING);
+
+                const currentExitIP =
+                    this.exitIP.label.text.replace("Exit IP Address : ", "");
 
                 return;
             }
@@ -642,6 +650,9 @@ class TorApplet extends Applet.IconApplet {
 
                     this.exitIP.label.text =
                         `Exit IP Address : ${ip}`;
+
+                    if (!this.testStatus.label.text.includes(ip))
+                        this.testStatus.label.text = "Test : Not Tested";
 
                 } catch(e) {
 
