@@ -51,6 +51,30 @@ class TorApplet extends Applet.IconApplet {
         );
 
         this.settings.bind(
+            "mask-octet-1",
+            "maskOctet1",
+            this.updateExitInfo.bind(this)
+        );
+
+        this.settings.bind(
+            "mask-octet-2",
+            "maskOctet2",
+            this.updateExitInfo.bind(this)
+        );
+
+        this.settings.bind(
+            "mask-octet-3",
+            "maskOctet3",
+            this.updateExitInfo.bind(this)
+        );
+
+        this.settings.bind(
+            "mask-octet-4",
+            "maskOctet4",
+            this.updateExitInfo.bind(this)
+        );
+
+        this.settings.bind(
             "tor-host",
             "torHost"
         );
@@ -485,6 +509,21 @@ class TorApplet extends Applet.IconApplet {
         );
     }
 
+    maskIPAddress(ip) {
+
+        const parts = ip.split(".");
+
+        if (parts.length !== 4)
+            return ip;
+
+        if (this.maskOctet1) parts[0] = "xxx";
+        if (this.maskOctet2) parts[1] = "xxx";
+        if (this.maskOctet3) parts[2] = "xxx";
+        if (this.maskOctet4) parts[3] = "xxx";
+
+        return parts.join(".");
+    }
+
     newIdentity() {
 
         this.testStatus.label.text = "Test : Not Tested";
@@ -649,7 +688,7 @@ class TorApplet extends Applet.IconApplet {
                         `Exit City : ${city}`;
 
                     this.exitIP.label.text =
-                        `Exit IP Address : ${ip}`;
+                        `Exit IP Address : ${this.maskIPAddress(ip)}`;
 
                     if (!this.testStatus.label.text.includes(ip))
                         this.testStatus.label.text = "Test : Not Tested";
@@ -708,7 +747,7 @@ class TorApplet extends Applet.IconApplet {
                     if (data.IsTor) {
 
                         this.testStatus.label.text =
-                            `Test : Tor OK (${data.IP})`;
+                            `Test : Tor OK (${this.maskIPAddress(data.IP)})`;
 
                     } else {
 

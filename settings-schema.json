@@ -22,6 +22,35 @@
         "description": "Show Exit IP Address"
     },
 
+    "mask-section": {
+        "type": "header",
+        "description": "Mask IP Address"
+    },
+
+    "mask-octet-1": {
+        "type": "checkbox",
+        "default": false,
+        "description": "Hide 1st Octet"
+    },
+
+    "mask-octet-2": {
+        "type": "checkbox",
+        "default": false,
+        "description": "Hide 2nd Octet"
+    },
+
+    "mask-octet-3": {
+        "type": "checkbox",
+        "default": false,
+        "description": "Hide 3rd Octet"
+    },
+
+    "mask-octet-4": {
+        "type": "checkbox",
+        "default": false,
+        "description": "Hide 4th Octet"
+    },
+
     "tor-section": {
         "type": "header",
         "description": "Tor Settings"
