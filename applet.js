@@ -91,7 +91,8 @@ class TorApplet extends Applet.IconApplet {
 
         this.settings.bind(
             "refresh-interval",
-            "refreshInterval"
+            "refreshInterval",
+            this.updateRefreshTimer.bind(this)
         );
 
         this.settings.bind(
@@ -116,6 +117,16 @@ class TorApplet extends Applet.IconApplet {
         this.refresh();
 
         this.updateExitInfo();
+
+        this.updateRefreshTimer();
+    }
+
+    updateRefreshTimer() {
+
+        if (this._refreshTimer) {
+            GLib.Source.remove(this._refreshTimer);
+            this._refreshTimer = 0;
+        }
 
         this._refreshTimer = GLib.timeout_add_seconds(
             GLib.PRIORITY_DEFAULT,
@@ -606,7 +617,7 @@ class TorApplet extends Applet.IconApplet {
 
                                 global.logError(e);
 
-                                this.exitCounry.label.text =
+                                this.exitCountry.label.text =
                                     "Exit : Identity Change Failed";
                                 this.exitCity.label.text =
                                     "Exit : Identity Change Failed";
@@ -695,6 +706,8 @@ class TorApplet extends Applet.IconApplet {
 
                     this.menu.actor.queue_relayout();
                     this.menu.box.queue_relayout();
+
+                    global.log(`Country = ${country}, City = ${city}, IP = ${ip}`);
 
                 } catch(e) {
 
