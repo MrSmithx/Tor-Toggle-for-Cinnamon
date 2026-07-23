@@ -654,6 +654,9 @@ class TorApplet extends Applet.IconApplet {
                     if (!this.testStatus.label.text.includes(ip))
                         this.testStatus.label.text = "Test : Not Tested";
 
+                    this.menu.actor.queue_relayout();
+                    this.menu.box.queue_relayout();
+
                 } catch(e) {
 
                     global.logError(
