@@ -6,6 +6,7 @@ const Gio = imports.gi.Gio;
 const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
 const Settings = imports.ui.settings;
+const ModalDialog = imports.ui.modalDialog;
 
 const ICONS = {
     TOR_ON: "org.x.Warpinator-symbolic",
@@ -15,6 +16,39 @@ const ICONS = {
     PROXY_ON: "network-transmit-receive-symbolic",
     PROXY_OFF: "network-error-symbolic"
 };
+
+class TorLogDialog extends ModalDialog.ModalDialog {
+
+    constructor(logText) {
+
+        super();
+
+        this.setButtons([
+            {
+                label: _("Close"),
+                action: () => this.close()
+            }
+        ]);
+
+        const scroll = new St.ScrollView({
+            style: "width: 800px; height: 500px;"
+        });
+
+        const label = new St.Label({
+            text: logText,
+            style: "font-family: monospace; padding: 12px;",
+            x_expand: true,
+            y_expand: true
+        });
+
+        label.clutter_text.set_selectable(true);
+
+        scroll.add_actor(label);
+
+        this.contentLayout.add(scroll);
+
+    }
+}
 
 class TorApplet extends Applet.IconApplet {
 
@@ -100,6 +134,11 @@ class TorApplet extends Applet.IconApplet {
             "autoProxy"
         );
 
+        this.settings.bind(
+            "tor-control-password",
+            "controlPassword"
+        );
+
         this.menuManager = new PopupMenu.PopupMenuManager(this);
         this.menu = new Applet.AppletPopupMenu(this, orientation);
         this.menuManager.addMenu(this.menu);
@@ -116,8 +155,6 @@ class TorApplet extends Applet.IconApplet {
 
         this.refresh();
 
-        this.updateExitInfo();
-
         this.updateRefreshTimer();
     }
 
@@ -125,12 +162,16 @@ class TorApplet extends Applet.IconApplet {
 
         if (this._refreshTimer) {
             GLib.Source.remove(this._refreshTimer);
-            this._refreshTimer = 0;
         }
+
+        const interval = Math.max(
+            5,
+            Number(this.refreshInterval) || 15
+        );
 
         this._refreshTimer = GLib.timeout_add_seconds(
             GLib.PRIORITY_DEFAULT,
-            this.refreshInterval,
+            interval,
             () => {
                 this.refresh();
                 return GLib.SOURCE_CONTINUE;
@@ -158,7 +199,6 @@ class TorApplet extends Applet.IconApplet {
             St.IconType.SYMBOLIC
         );
 
-        this.statusTitle.label.x_expand = true;
         this.statusTitle.setSensitive(false);
         this.menu.addMenuItem(this.statusTitle);
 
@@ -168,7 +208,6 @@ class TorApplet extends Applet.IconApplet {
             St.IconType.SYMBOLIC
         );
 
-        this.proxyStatus.label.x_expand = true;
         this.proxyStatus.setSensitive(false);
         this.menu.addMenuItem(this.proxyStatus);
 
@@ -178,7 +217,6 @@ class TorApplet extends Applet.IconApplet {
             St.IconType.SYMBOLIC
         );
 
-        this.exitCountry.label.x_expand = true;
         this.exitCountry.setSensitive(false);
         this.menu.addMenuItem(this.exitCountry);
 
@@ -188,7 +226,6 @@ class TorApplet extends Applet.IconApplet {
             St.IconType.SYMBOLIC
         );
 
-        this.exitCity.label.x_expand = true;
         this.exitCity.setSensitive(false);
         this.menu.addMenuItem(this.exitCity);
 
@@ -198,9 +235,17 @@ class TorApplet extends Applet.IconApplet {
             St.IconType.SYMBOLIC
         );
 
-        this.exitIP.label.x_expand = true;
         this.exitIP.setSensitive(false);
         this.menu.addMenuItem(this.exitIP);
+
+        this.exitCountry.label.x_expand = true;
+        this.exitCountry.label.x_align = Clutter.ActorAlign.FILL;
+
+        this.exitCity.label.x_expand = true;
+        this.exitCity.label.x_align = Clutter.ActorAlign.FILL;
+
+        this.exitIP.label.x_expand = true;
+        this.exitIP.label.x_align = Clutter.ActorAlign.FILL;
 
         this.menu.addMenuItem(
             new PopupMenu.PopupSeparatorMenuItem()
@@ -334,7 +379,6 @@ class TorApplet extends Applet.IconApplet {
     }
 
     setState(running) {
-
         this.set_applet_icon_path(
             `${this.metadata.path}/tor_${running ? "on" : "off"}.png`
         );
@@ -372,7 +416,6 @@ class TorApplet extends Applet.IconApplet {
     }
 
     refresh() {
-
         this.torInstalled(installed => {
 
             if (!installed) {
@@ -398,9 +441,6 @@ class TorApplet extends Applet.IconApplet {
 
                 this.proxyStatus.setIconName(ICONS.WARNING);
 
-                const currentExitIP =
-                    this.exitIP.label.text.replace("Exit IP Address : ", "");
-
                 return;
             }
 
@@ -410,7 +450,13 @@ class TorApplet extends Applet.IconApplet {
 
                 this.setState(running);
 
-                this.updateExitInfo();
+                if (running)
+                    this.updateExitInfo();
+                else {
+                    this.exitCountry.label.text = "Exit Country : Unavailable";
+                    this.exitCity.label.text = "Exit City : Unavailable";
+                    this.exitIP.label.text = "Exit IP Address : Unavailable";
+                }
 
             });
 
@@ -440,7 +486,6 @@ class TorApplet extends Applet.IconApplet {
     }
 
     enableProxy() {
-
         this.proxySettings.set_string(
             "mode",
             "manual"
@@ -465,7 +510,6 @@ class TorApplet extends Applet.IconApplet {
     }
 
     toggleTor(enable) {
-
         this.testStatus.label.text = "Test : Not Tested";
 
         if (GLib.find_program_in_path("tor") === null) {
@@ -521,7 +565,6 @@ class TorApplet extends Applet.IconApplet {
     }
 
     maskIPAddress(ip) {
-
         const parts = ip.split(".");
 
         if (parts.length !== 4)
@@ -536,7 +579,6 @@ class TorApplet extends Applet.IconApplet {
     }
 
     newIdentity() {
-
         this.testStatus.label.text = "Test : Not Tested";
 
         const client = new Gio.SocketClient();
@@ -567,68 +609,6 @@ class TorApplet extends Applet.IconApplet {
                                 connection.get_input_stream()
                         });
 
-                    const command =
-                        'AUTHENTICATE "password"\r\n' +
-                        'SIGNAL NEWNYM\r\n' +
-                        'QUIT\r\n';
-
-                    output.write_all(
-                        command,
-                        null
-                    );
-
-                    output.flush(null);
-
-                    global.log("Commands sent");
-
-                    input.read_line_async(
-                        GLib.PRIORITY_DEFAULT,
-                        null,
-                        (stream, res) => {
-
-                            try {
-
-                                const [line] =
-                                    stream.read_line_finish_utf8(res);
-
-                                global.log(
-                                    "Tor replied: " + line
-                                );
-
-                                this.exitCountry.label.text =
-                                    "Exit : Changing...";
-                                this.exitCity.label.text =
-                                    "Exit : Changing...";
-                                this.exitIP.label.text =
-                                    "Exit : Changing...";
-
-                                GLib.timeout_add_seconds(
-                                    GLib.PRIORITY_DEFAULT,
-                                    5,
-                                    () => {
-
-                                        this.updateExitInfo();
-
-                                        return GLib.SOURCE_REMOVE;
-                                    }
-                                );
-
-                            } catch (e) {
-
-                                global.logError(e);
-
-                                this.exitCountry.label.text =
-                                    "Exit : Identity Change Failed";
-                                this.exitCity.label.text =
-                                    "Exit : Identity Change Failed";
-                                this.exitIP.label.text =
-                                    "Exit : Identity Change Failed";
-                            }
-
-                            connection.close(null);
-
-                        });
-
                 } catch (e) {
 
                     global.logError(e);
@@ -644,8 +624,166 @@ class TorApplet extends Applet.IconApplet {
         );
     }
 
-    updateExitInfo() {
+    sendCommand(output, command) {
+        output.write_all(`${command}\r\n`, null);
+        output.flush(null);
+    }
 
+    readResponse(input, callback) {
+        let lines = [];
+
+        const readNext = () => {
+
+            input.read_line_async(
+                GLib.PRIORITY_DEFAULT,
+                null,
+                (stream, res) => {
+
+                    try {
+
+                        const [line] =
+                            stream.read_line_finish_utf8(res);
+
+                        if (line === null) {
+                            callback(lines);
+                            return;
+                        }
+
+                        lines.push(line);
+
+                        // Final line from Tor
+                        if (line === "250 OK" || line.startsWith("5")) {
+                            callback(lines);
+                            return;
+                        }
+
+                        readNext();
+
+                    } catch (e) {
+
+                        callback(null, e);
+
+                    }
+
+                }
+            );
+
+        };
+
+        readNext();
+    }
+
+    parseProtocolInfo(lines) {
+        const reply = lines.join("\n");
+
+        return {
+
+            methods:
+                reply.match(/METHODS=([^ ]+)/)?.[1]
+                    ?.split(",") ?? [],
+
+            cookieFile:
+                reply.match(/COOKIEFILE="([^"]+)"/)?.[1] ?? null
+
+        };
+    }
+
+    authenticate(info, output, input, connection) {
+        if (info.methods.includes("COOKIE")) {
+
+            this.authenticateCookie(
+                info.cookieFile,
+                output,
+                input,
+                connection
+            );
+
+        } else if (
+            info.methods.includes("HASHEDPASSWORD") &&
+            this.controlPassword
+        ) {
+
+            this.sendCommand(
+                output,
+                `AUTHENTICATE "${this.controlPassword}"`
+            );
+
+            this.finishAuthentication(
+                output,
+                input,
+                connection
+            );
+
+        } else {
+
+            throw new Error(
+                "No supported authentication method available."
+            );
+        }
+    }
+
+    authenticateCookie(path, output, input, connection) {
+        const file = Gio.File.new_for_path(path);
+
+        try {
+
+            const [, bytes] = file.load_contents(null);
+
+        } catch (e) {
+
+            global.logError(
+                "Unable to read Tor authentication cookie."
+            );
+
+            const hex = Array.from(bytes)
+                .map(b => b.toString(16).padStart(2, "0"))
+                .join("");
+
+            this.sendCommand(
+                output,
+                `AUTHENTICATE ${hex}`
+            );
+
+            this.finishAuthentication(
+                output,
+                input,
+                connection
+            );
+        }
+    }
+
+    finishAuthentication(output, input, connection) {
+        this.readResponse(input, lines => {
+
+            if (!lines.some(l => l === "250 OK")) {
+
+                connection.close(null);
+
+                return;
+            }
+
+            this.sendCommand(
+                output,
+                "SIGNAL NEWNYM"
+            );
+
+            this.readResponse(input, () => {
+
+                this.sendCommand(
+                    output,
+                    "QUIT"
+                );
+
+                connection.close(null);
+
+                this.updateExitInfo();
+
+            });
+
+        });
+    }
+
+    updateExitInfo() {
         if (!this.exitIP)
             return;
 
@@ -704,10 +842,8 @@ class TorApplet extends Applet.IconApplet {
                     if (!this.testStatus.label.text.includes(ip))
                         this.testStatus.label.text = "Test : Not Tested";
 
-                    this.menu.actor.queue_relayout();
                     this.menu.box.queue_relayout();
-
-                    global.log(`Country = ${country}, City = ${city}, IP = ${ip}`);
+                    this.menu.box.queue_relayout();
 
                 } catch(e) {
 
@@ -729,7 +865,6 @@ class TorApplet extends Applet.IconApplet {
     }
 
     testTorConnection() {
-
         this.testStatus.label.text = "Test : Testing...";
 
         const cmd =
@@ -780,7 +915,6 @@ class TorApplet extends Applet.IconApplet {
     }
 
     on_applet_removed_from_panel() {
-
         if (this._refreshTimer) {
             GLib.Source.remove(this._refreshTimer);
         }
