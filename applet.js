@@ -7,10 +7,11 @@ const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
 const Settings = imports.ui.settings;
 const ModalDialog = imports.ui.modalDialog;
+const Pango = imports.gi.Pango;
 
 const ICONS = {
-    TOR_ON: "org.x.Warpinator-symbolic",
-    TOR_OFF: "org.x.Warpinator-error-symbolic",
+    TOR_ON: "nm-vpn-standalone-lock-symbolic",
+    TOR_OFF: "screensaver-unlock-symbolic",
     ERROR: "dialog-error-symbolic",
     WARNING: "dialog-warning-symbolic",
     PROXY_ON: "network-transmit-receive-symbolic",
@@ -218,7 +219,12 @@ class TorApplet extends Applet.IconApplet {
         );
 
         this.exitCountry.setSensitive(false);
+        this.exitCountry.actor.x_expand = true;
+        this.exitCountry.x_expand = true;
         this.menu.addMenuItem(this.exitCountry);
+
+        this.exitCountry.label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        this.exitCountry.label.clutter_text.line_wrap = false;
 
         this.exitCity = new PopupMenu.PopupIconMenuItem(
             "Exit City : Checking...",
@@ -227,7 +233,12 @@ class TorApplet extends Applet.IconApplet {
         );
 
         this.exitCity.setSensitive(false);
+        this.exitCity.actor.x_expand = true;
+        this.exitCity.x_expand = true;
         this.menu.addMenuItem(this.exitCity);
+
+        this.exitCity.label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        this.exitCity.label.clutter_text.line_wrap = false;
 
         this.exitIP = new PopupMenu.PopupIconMenuItem(
             "Exit IP Address : Checking...",
@@ -236,16 +247,12 @@ class TorApplet extends Applet.IconApplet {
         );
 
         this.exitIP.setSensitive(false);
+        this.exitIP.actor.x_expand = true;
+        this.exitIP.x_expand = true;
         this.menu.addMenuItem(this.exitIP);
 
-        this.exitCountry.label.x_expand = true;
-        this.exitCountry.label.x_align = Clutter.ActorAlign.FILL;
-
-        this.exitCity.label.x_expand = true;
-        this.exitCity.label.x_align = Clutter.ActorAlign.FILL;
-
-        this.exitIP.label.x_expand = true;
-        this.exitIP.label.x_align = Clutter.ActorAlign.FILL;
+        this.exitIP.label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        this.exitIP.label.clutter_text.line_wrap = false;
 
         this.menu.addMenuItem(
             new PopupMenu.PopupSeparatorMenuItem()
@@ -346,6 +353,177 @@ class TorApplet extends Applet.IconApplet {
         );
 
         this.updateMenuVisibility();
+    }
+
+    setBootstrapProgress(progress) {
+        this.exitCountry.label.text =
+            "Exit Country : Bootstrapping Tor";
+
+        this.exitCity.label.text =
+            `Exit City : ${progress}%`;
+
+        this.exitIP.label.text =
+            "Exit IP Address : Loading...";
+
+        this.menu.box.queue_relayout();
+    }
+
+    pollBootstrap() {
+
+        const client = new Gio.SocketClient();
+
+        const address = Gio.NetworkAddress.new(
+            this.torHost,
+            this.controlPort
+        );
+
+        client.connect_async(address, null, (client, result) => {
+
+            try {
+
+                const connection =
+                    client.connect_finish(result);
+
+                const output =
+                    connection.get_output_stream();
+
+                const input =
+                    new Gio.DataInputStream({
+                        base_stream:
+                            connection.get_input_stream()
+                    });
+
+                this.sendCommand(output, "PROTOCOLINFO 1");
+
+                this.readResponse(input, lines => {
+
+                    const info =
+                        this.parseProtocolInfo(lines);
+
+                    this.authenticateBootstrap(
+                        info,
+                        output,
+                        input,
+                        connection
+                    );
+
+                });
+
+            } catch (e) {
+                global.logError(e);
+            }
+        });
+    }
+
+    authenticateBootstrap(info, output, input, connection) {
+
+        if (info.methods.includes("HASHEDPASSWORD") &&
+            this.controlPassword) {
+
+            this.sendCommand(
+                output,
+                `AUTHENTICATE "${this.controlPassword}"`
+            );
+
+            this.finishBootstrapAuthentication(
+                output,
+                input,
+                connection
+            );
+
+            return;
+        }
+
+        if (info.methods.includes("COOKIE")) {
+
+            const file =
+                Gio.File.new_for_path(info.cookieFile);
+
+            try {
+
+                const [, bytes] =
+                    file.load_contents(null);
+
+                const hex =
+                    Array.from(bytes)
+                        .map(b => b.toString(16).padStart(2, "0"))
+                        .join("");
+
+                this.sendCommand(
+                    output,
+                    `AUTHENTICATE ${hex}`
+                );
+
+                this.finishBootstrapAuthentication(
+                    output,
+                    input,
+                    connection
+                );
+
+            } catch (e) {
+
+                global.logError(e);
+
+                connection.close(null);
+            }
+        }
+    }
+
+    finishBootstrapAuthentication(output, input, connection) {
+
+        this.readResponse(input, lines => {
+
+            if (!lines.some(l => l === "250 OK")) {
+
+                connection.close(null);
+
+                return;
+
+            }
+
+            this.sendCommand(
+                output,
+                "GETINFO status/bootstrap-phase"
+            );
+
+            this.readResponse(input, lines => {
+
+                connection.close(null);
+
+                const reply =
+                    lines.join("\n");
+
+                const match =
+                    reply.match(/PROGRESS=(\d+)/);
+
+                if (!match)
+                    return;
+
+                const progress =
+                    Number(match[1]);
+
+                this.setBootstrapProgress(progress);
+
+                if (progress >= 100) {
+
+                    this.updateExitInfo();
+
+                    return;
+
+                }
+
+                GLib.timeout_add_seconds(
+                    GLib.PRIORITY_DEFAULT,
+                    1,
+                    () => {
+
+                        this.pollBootstrap();
+
+                        return GLib.SOURCE_REMOVE;
+                    }
+                );
+            });
+        });
     }
 
     updateMenuVisibility() {
@@ -452,6 +630,7 @@ class TorApplet extends Applet.IconApplet {
 
                 if (running)
                     this.updateExitInfo();
+                    // this.setBootstrapProgress(0);
                 else {
                     this.exitCountry.label.text = "Exit Country : Unavailable";
                     this.exitCity.label.text = "Exit City : Unavailable";
@@ -548,12 +727,15 @@ class TorApplet extends Applet.IconApplet {
                         this.disableProxy();
                 }
 
+                this.setBootstrapProgress(0);
+                this.pollBootstrap();
+
                 GLib.timeout_add_seconds(
                     GLib.PRIORITY_DEFAULT,
-                    5,
+                    1,
                     () => {
 
-                        this.updateExitInfo();
+                        this.pollBootstrap();
 
                         return GLib.SOURCE_REMOVE;
                     }
@@ -609,6 +791,19 @@ class TorApplet extends Applet.IconApplet {
                                 connection.get_input_stream()
                         });
 
+                    this.sendCommand(output, "PROTOCOLINFO 1");
+
+                    this.readResponse(input, lines => {
+                        const info = this.parseProtocolInfo(lines);
+
+                        try {
+                            this.authenticate(info, output, input, connection);
+                        } catch (e) {
+                            global.logError(e);
+                            connection.close(null);
+                        }
+                    });
+
                 } catch (e) {
 
                     global.logError(e);
@@ -625,8 +820,17 @@ class TorApplet extends Applet.IconApplet {
     }
 
     sendCommand(output, command) {
-        output.write_all(`${command}\r\n`, null);
-        output.flush(null);
+        try {
+            global.log(`>>> ${command}`);
+
+            output.write_all(command + "\r\n", null);
+            output.flush(null);
+
+            global.log("write complete");
+            global.log(`${this.torHost}:${this.controlPort}`);
+        } catch (e) {
+            global.logError(e);
+        }
     }
 
     readResponse(input, callback) {
@@ -638,21 +842,25 @@ class TorApplet extends Applet.IconApplet {
                 GLib.PRIORITY_DEFAULT,
                 null,
                 (stream, res) => {
+                    global.log("read_line_async callback");
 
                     try {
+                        const [line] = stream.read_line_finish_utf8(res);
 
-                        const [line] =
-                            stream.read_line_finish_utf8(res);
+                        global.log(`line=${JSON.stringify(line)}`);
 
                         if (line === null) {
                             callback(lines);
                             return;
                         }
 
-                        lines.push(line);
+                        const clean = line.replace(/\r$/, "");
 
-                        // Final line from Tor
-                        if (line === "250 OK" || line.startsWith("5")) {
+                        lines.push(clean);
+
+                        global.log(`<<< ${clean}`);
+
+                        if (clean === "250 OK" || clean.startsWith("5")) {
                             callback(lines);
                             return;
                         }
@@ -660,11 +868,8 @@ class TorApplet extends Applet.IconApplet {
                         readNext();
 
                     } catch (e) {
-
-                        callback(null, e);
-
+                        global.logError(e);
                     }
-
                 }
             );
 
@@ -689,66 +894,50 @@ class TorApplet extends Applet.IconApplet {
     }
 
     authenticate(info, output, input, connection) {
-        if (info.methods.includes("COOKIE")) {
 
-            this.authenticateCookie(
-                info.cookieFile,
-                output,
-                input,
-                connection
-            );
-
-        } else if (
-            info.methods.includes("HASHEDPASSWORD") &&
-            this.controlPassword
-        ) {
+        if (info.methods.includes("HASHEDPASSWORD") &&
+            this.controlPassword) {
 
             this.sendCommand(
                 output,
                 `AUTHENTICATE "${this.controlPassword}"`
             );
 
-            this.finishAuthentication(
+            this.finishAuthentication(output, input, connection);
+
+            return;
+        }
+
+        if (info.methods.includes("COOKIE")) {
+            this.authenticateCookie(
+                info.cookieFile,
                 output,
                 input,
                 connection
             );
-
-        } else {
-
-            throw new Error(
-                "No supported authentication method available."
-            );
+            return;
         }
+
+        throw new Error("No supported authentication method.");
     }
 
     authenticateCookie(path, output, input, connection) {
         const file = Gio.File.new_for_path(path);
 
         try {
-
             const [, bytes] = file.load_contents(null);
-
-        } catch (e) {
-
-            global.logError(
-                "Unable to read Tor authentication cookie."
-            );
 
             const hex = Array.from(bytes)
                 .map(b => b.toString(16).padStart(2, "0"))
                 .join("");
 
-            this.sendCommand(
-                output,
-                `AUTHENTICATE ${hex}`
-            );
+            this.sendCommand(output, `AUTHENTICATE ${hex}`);
 
-            this.finishAuthentication(
-                output,
-                input,
-                connection
-            );
+            this.finishAuthentication(output, input, connection);
+
+        } catch (e) {
+            global.logError(e);
+            connection.close(null);
         }
     }
 
@@ -769,17 +958,21 @@ class TorApplet extends Applet.IconApplet {
 
             this.readResponse(input, () => {
 
-                this.sendCommand(
-                    output,
-                    "QUIT"
-                );
+                this.sendCommand(output, "QUIT");
 
                 connection.close(null);
 
-                this.updateExitInfo();
+                this.setBootstrapProgress(0);
 
+                GLib.timeout_add_seconds(
+                    GLib.PRIORITY_DEFAULT,
+                    1,
+                    () => {
+                        this.pollBootstrap();
+                        return GLib.SOURCE_REMOVE;
+                    }
+                );
             });
-
         });
     }
 
