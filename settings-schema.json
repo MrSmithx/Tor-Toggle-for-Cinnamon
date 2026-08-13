@@ -1,97 +1,218 @@
 {
-    "menu-section": {
-        "type": "header",
-        "description": "Menu Settings"
+  "layout": {
+    "type": "layout",
+    "pages": [
+      "torPage",
+      "privacyPage",
+      "menuPage"
+    ],
+
+    "torPage": {
+      "type": "page",
+      "title": "Tor Settings",
+      "sections": [
+        "torSection",
+        "authSection"
+      ]
     },
 
-    "showCountry": {
-        "type": "switch",
-        "default": true,
-        "description": "Show Exit Country"
+    "privacyPage": {
+      "type": "page",
+      "title": "Privacy Settings",
+      "sections": [
+        "privacySection",
+        "ipSection"
+      ]
     },
 
-    "showCity": {
-        "type": "switch",
-        "default": true,
-        "description": "Show Exit City"
+    "menuPage": {
+      "type": "page",
+      "title": "Menu Settings",
+      "sections": [
+        "menuSection"
+      ]
     },
 
-    "showIP": {
-        "type": "switch",
-        "default": true,
-        "description": "Show Exit IP Address"
+    "torSection": {
+      "type": "section",
+      "title": "",
+      "keys": [
+        "tor-host",
+        "socks-port",
+        "control-port",
+        "refresh-interval",
+        "auto-proxy"
+      ]
     },
 
-    "mask-section": {
-        "type": "header",
-        "description": "Mask IP Address"
+    "authSection": {
+      "type": "section",
+      "title": "Tor Authentication Settings",
+      "keys": [
+        "auth-method",
+        "tor-control-password",
+        "authLabel"
+      ]
     },
 
-    "mask-octet-1": {
-        "type": "checkbox",
-        "default": false,
-        "description": "Hide 1st Octet"
+    "privacySection": {
+      "type": "section",
+      "title": "",
+      "keys": [
+        "showCountry",
+        "showCity",
+        "showIP"
+      ]
     },
 
-    "mask-octet-2": {
-        "type": "checkbox",
-        "default": false,
-        "description": "Hide 2nd Octet"
+    "ipSection": {
+      "type": "section",
+      "title": "Mask IP",
+      "keys": [
+        "mask-octet-1",
+        "mask-octet-2",
+        "mask-octet-3",
+        "mask-octet-4"
+      ]
     },
 
-    "mask-octet-3": {
-        "type": "checkbox",
-        "default": false,
-        "description": "Hide 3rd Octet"
-    },
-
-    "mask-octet-4": {
-        "type": "checkbox",
-        "default": false,
-        "description": "Hide 4th Octet"
-    },
-
-    "tor-section": {
-        "type": "header",
-        "description": "Tor Settings"
-    },
-
-    "tor-host": {
-        "type": "entry",
-        "default": "127.0.0.1",
-        "description": "Tor Host"
-    },
-
-    "socks-port": {
-        "type": "spinbutton",
-        "default": 9050,
-        "min": 1,
-        "max": 65535,
-        "step": 1,
-        "description": "SOCKS Port"
-    },
-
-    "control-port": {
-        "type": "spinbutton",
-        "default": 9051,
-        "min": 1,
-        "max": 65535,
-        "step": 1,
-        "description": "Control Port"
-    },
-
-    "refresh-interval": {
-        "type": "spinbutton",
-        "default": 15,
-        "min": 5,
-        "max": 300,
-        "step": 5,
-        "description": "Refresh Interval (seconds)"
-    },
-
-    "auto-proxy": {
-        "type": "switch",
-        "default": true,
-        "description": "Enable Proxy when Tor starts"
+    "menuSection": {
+      "type": "section",
+      "title": "",
+      "keys": [
+        "showHeader",
+        "showNewIdentity",
+        "showTest",
+        "showPrefs"
+      ]
     }
+  },
+
+  "showHeader": {
+      "type": "switch",
+      "default": true,
+      "description": "Show Header"
+  },
+
+  "showPrefs": {
+      "type": "switch",
+      "default": true,
+      "description": "Show Preferences"
+  },
+
+  "showTest": {
+      "type": "switch",
+      "default": true,
+      "description": "Show Connection Test"
+  },
+
+  "showNewIdentity": {
+      "type": "switch",
+      "default": true,
+      "description": "Show New Identity"
+  },
+
+  "showCountry": {
+      "type": "switch",
+      "default": true,
+      "description": "Show Exit Country"
+  },
+
+  "showCity": {
+      "type": "switch",
+      "default": true,
+      "description": "Show Exit City"
+  },
+
+  "showIP": {
+      "type": "switch",
+      "default": true,
+      "description": "Show Exit IP Address"
+  },
+
+  "mask-octet-1": {
+      "type": "checkbox",
+      "default": false,
+      "description": "Hide 1st Octet"
+  },
+
+  "mask-octet-2": {
+      "type": "checkbox",
+      "default": false,
+      "description": "Hide 2nd Octet"
+  },
+
+  "mask-octet-3": {
+      "type": "checkbox",
+      "default": false,
+      "description": "Hide 3rd Octet"
+  },
+
+  "mask-octet-4": {
+      "type": "checkbox",
+      "default": false,
+      "description": "Hide 4th Octet"
+  },
+
+  "tor-host": {
+      "type": "entry",
+      "default": "127.0.0.1",
+      "description": "Tor Host"
+  },
+
+  "socks-port": {
+      "type": "spinbutton",
+      "default": 9050,
+      "min": 1,
+      "max": 65535,
+      "step": 1,
+      "description": "SOCKS Port"
+  },
+
+  "control-port": {
+      "type": "spinbutton",
+      "default": 9051,
+      "min": 1,
+      "max": 65535,
+      "step": 1,
+      "description": "Control Port"
+  },
+
+  "refresh-interval": {
+      "type": "spinbutton",
+      "default": 15,
+      "min": 5,
+      "max": 300,
+      "step": 5,
+      "description": "Refresh Interval (seconds)"
+  },
+
+  "auto-proxy": {
+      "type": "switch",
+      "default": true,
+      "description": "Enable Proxy when Tor starts"
+  },
+
+  "tor-control-password": {
+      "type": "entry",
+      "default": "",
+      "description": "Tor Control Password"
+  },
+
+  "auth-method": {
+      "type": "combobox",
+      "default": "auto",
+      "description": "Tor Authentication Method",
+      "options": {
+          "Automatic": "auto",
+          "Cookie": "cookie",
+          "SafeCookie": "safecookie",
+          "Password (Optional)": "password"
+      }
+  },
+
+  "authLabel": {
+    "type": "label",
+    "description": "- 'Automatic' will try 'Cookie' > 'SafeCookie' > 'Password' (if 'Password' is set).\n- Cookie and SafeCookie require read access to '/run/tor/control.authcookie'.\n- Use command 'tor --hash-password <your_password>' to generate your Tor Hash Password.\n- Make sure your Hash Password is updated in your 'torrc' file."
+  }
 }

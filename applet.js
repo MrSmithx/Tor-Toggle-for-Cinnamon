@@ -7,7 +7,6 @@ const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
 const Settings = imports.ui.settings;
 const ModalDialog = imports.ui.modalDialog;
-const Pango = imports.gi.Pango;
 
 const ICONS = {
     TOR_ON: "nm-vpn-standalone-lock-symbolic",
@@ -15,41 +14,15 @@ const ICONS = {
     ERROR: "dialog-error-symbolic",
     WARNING: "dialog-warning-symbolic",
     PROXY_ON: "network-transmit-receive-symbolic",
-    PROXY_OFF: "network-error-symbolic"
+    PROXY_OFF: "network-error-symbolic",
+    COUNTRY_LOC: "mark-location-symbolic",
+    CITY_LOC: "find-location-symbolic",
+    IP: "xsi-network-server-symbolic",
+    NEW_IDENTITY: "view-refresh-symbolic",
+    TEST_CONNECTION: "network-workgroup-symbolic",
+    TEST_STATUS: "xsi-network-wireless-hotspot-symbolic",
+    PREFS: "emblem-system-symbolic"
 };
-
-class TorLogDialog extends ModalDialog.ModalDialog {
-
-    constructor(logText) {
-
-        super();
-
-        this.setButtons([
-            {
-                label: _("Close"),
-                action: () => this.close()
-            }
-        ]);
-
-        const scroll = new St.ScrollView({
-            style: "width: 800px; height: 500px;"
-        });
-
-        const label = new St.Label({
-            text: logText,
-            style: "font-family: monospace; padding: 12px;",
-            x_expand: true,
-            y_expand: true
-        });
-
-        label.clutter_text.set_selectable(true);
-
-        scroll.add_actor(label);
-
-        this.contentLayout.add(scroll);
-
-    }
-}
 
 class TorApplet extends Applet.IconApplet {
 
@@ -67,81 +40,40 @@ class TorApplet extends Applet.IconApplet {
             instanceId
         );
 
-        this.settings.bind(
-            "showCountry",
-            "showCountry",
-            this.updateMenuVisibility.bind(this)
-        );
+        [
+            ["showHeader", "showHeader"],
+            ["showPrefs", "showPrefs"],
+            ["showTest", "showTest"],
+            ["showNewIdentity", "showNewIdentity"],
+            ["showCountry", "showCountry"],
+            ["showCity", "showCity"],
+            ["showIP", "showIP"],
+        ].forEach(([key, property]) => {
+            this.settings.bind(key, property, this.updateMenuVisibility.bind(this));
+        });
 
-        this.settings.bind(
-            "showCity",
-            "showCity",
-            this.updateMenuVisibility.bind(this)
-        );
+        [
+            ["mask-octet-1", "maskOctet1"],
+            ["mask-octet-2", "maskOctet2"],
+            ["mask-octet-3", "maskOctet3"],
+            ["mask-octet-4", "maskOctet4"],
+        ].forEach(([key, property]) => {
+            this.settings.bind(key, property, this.updateExitInfo.bind(this));
+        });
 
-        this.settings.bind(
-            "showIP",
-            "showIP",
-            this.updateMenuVisibility.bind(this)
-        );
+        [
+            ["tor-host", "torHost"],
+            ["socks-port", "socksPort"],
+            ["control-port", "controlPort"],
+            ["auto-proxy", "autoProxy"],
+            ["tor-control-password", "controlPassword"],
+            ["auth-method", "authMethod"]
+        ].forEach(([key, property]) => {
+            this.settings.bind(key, property);
+        });
 
-        this.settings.bind(
-            "mask-octet-1",
-            "maskOctet1",
-            this.updateExitInfo.bind(this)
-        );
-
-        this.settings.bind(
-            "mask-octet-2",
-            "maskOctet2",
-            this.updateExitInfo.bind(this)
-        );
-
-        this.settings.bind(
-            "mask-octet-3",
-            "maskOctet3",
-            this.updateExitInfo.bind(this)
-        );
-
-        this.settings.bind(
-            "mask-octet-4",
-            "maskOctet4",
-            this.updateExitInfo.bind(this)
-        );
-
-        this.settings.bind(
-            "tor-host",
-            "torHost"
-        );
-
-        this.settings.bind(
-            "socks-port",
-            "socksPort"
-        );
-
-        this.settings.bind(
-            "control-port",
-            "controlPort"
-        );
-
-        this.settings.bind(
-            "refresh-interval",
-            "refreshInterval",
-            this.updateRefreshTimer.bind(this)
-        );
-
-        this.settings.bind(
-            "auto-proxy",
-            "autoProxy"
-        );
-
-        this.settings.bind(
-            "tor-control-password",
-            "controlPassword"
-        );
-
-        this.menuManager = new PopupMenu.PopupMenuManager(this);
         this.menu = new Applet.AppletPopupMenu(this, orientation);
+        this.menuManager = new PopupMenu.PopupMenuManager(this);
         this.menuManager.addMenu(this.menu);
 
         this.proxySettings = new Gio.Settings({
@@ -159,8 +91,23 @@ class TorApplet extends Applet.IconApplet {
         this.updateRefreshTimer();
     }
 
-    updateRefreshTimer() {
+    updateMenuVisibility() {
+        if (this._header)
+            this._header.visible = this.showHeader;
 
+        this.exitCountry.actor.visible = this.showCountry;
+        this.exitCity.actor.visible = this.showCity;
+        this.exitIP.actor.visible = this.showIP;
+
+        this.newIdentityButton.actor.visible = this.showNewIdentity;
+        this.testConnectionButton.actor.visible = this.showTest;
+        this.testStatus.actor.visible = this.showTest;
+
+        if (this.settingsButton)
+            this.settingsButton.actor.visible = this.showPrefs;
+    }
+
+    updateRefreshTimer() {
         if (this._refreshTimer) {
             GLib.Source.remove(this._refreshTimer);
         }
@@ -180,12 +127,28 @@ class TorApplet extends Applet.IconApplet {
         );
     }
 
-    buildMenu() {
+    on_applet_clicked() {
+        if (this.menu.isOpen) {
+            this.menu.close(true);
+            return;
+        }
 
+        this._refreshMenuLayout();
+        this.menu.open(true);
+
+        GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            if (this.menu.isOpen)
+                this._refreshMenuLayout();
+
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    buildMenu() {
         this._header = new St.Label({
-            text: "Tor Control",
+            text: "- Tor Control -",
             x_align: Clutter.ActorAlign.CENTER,
-            style: "font-size:16pt; color:#888888; padding:6px 12px;"
+            style: "font-size:16pt; color: white; padding:6px 12px;"
         });
 
         this.menu.box.add_child(this._header);
@@ -194,65 +157,45 @@ class TorApplet extends Applet.IconApplet {
             new PopupMenu.PopupSeparatorMenuItem()
         );
 
-        this.statusTitle = new PopupMenu.PopupIconMenuItem(
-            "Tor Status : Checking...",
-            ICONS.TOR_OFF,
-            St.IconType.SYMBOLIC
-        );
+        this.torStatus = new PopupMenu.PopupIconMenuItem(
+            "Tor Status : Checking...", ICONS.TOR_OFF, St.IconType.SYMBOLIC);
 
-        this.statusTitle.setSensitive(false);
-        this.menu.addMenuItem(this.statusTitle);
+        this.torStatus.label.set_style("color: white;");
+        this.torStatus._icon.set_style("color: white;");
+        this.torStatus.setSensitive(false);
+        this.menu.addMenuItem(this.torStatus);
 
         this.proxyStatus = new PopupMenu.PopupIconMenuItem(
-            "System Proxy : Disabled",
-            ICONS.PROXY_OFF,
-            St.IconType.SYMBOLIC
-        );
+            "System Proxy : Disabled", ICONS.PROXY_OFF, St.IconType.SYMBOLIC);
 
+        this.proxyStatus.label.set_style("color: white;");
+        this.proxyStatus._icon.set_style("color: white;");
         this.proxyStatus.setSensitive(false);
         this.menu.addMenuItem(this.proxyStatus);
 
         this.exitCountry = new PopupMenu.PopupIconMenuItem(
-            "Exit Country : Checking...",
-            "mark-location-symbolic",
-            St.IconType.SYMBOLIC
-        );
+            "Exit Country : Checking...", ICONS.COUNTRY_LOC, St.IconType.SYMBOLIC);
 
+        this.exitCountry.label.set_style("min-width: 175px; color: white;");
+        this.exitCountry._icon.set_style("color: white;");
         this.exitCountry.setSensitive(false);
-        this.exitCountry.actor.x_expand = true;
-        this.exitCountry.x_expand = true;
         this.menu.addMenuItem(this.exitCountry);
 
-        this.exitCountry.label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-        this.exitCountry.label.clutter_text.line_wrap = false;
-
         this.exitCity = new PopupMenu.PopupIconMenuItem(
-            "Exit City : Checking...",
-            "find-location-symbolic",
-            St.IconType.SYMBOLIC
-        );
+            "Exit City : Checking...", ICONS.CITY_LOC, St.IconType.SYMBOLIC);
 
+        this.exitCity.label.set_style("min-width: 175px; color: white;");
+        this.exitCity._icon.set_style("color: white;");
         this.exitCity.setSensitive(false);
-        this.exitCity.actor.x_expand = true;
-        this.exitCity.x_expand = true;
         this.menu.addMenuItem(this.exitCity);
 
-        this.exitCity.label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-        this.exitCity.label.clutter_text.line_wrap = false;
-
         this.exitIP = new PopupMenu.PopupIconMenuItem(
-            "Exit IP Address : Checking...",
-            "xsi-network-server-symbolic",
-            St.IconType.SYMBOLIC
-        );
+            "Exit IP Address : Checking...", ICONS.IP, St.IconType.SYMBOLIC);
 
+        this.exitIP.label.set_style("min-width: 175px; color: white;");
+        this.exitIP._icon.set_style("color: white;");
         this.exitIP.setSensitive(false);
-        this.exitIP.actor.x_expand = true;
-        this.exitIP.x_expand = true;
         this.menu.addMenuItem(this.exitIP);
-
-        this.exitIP.label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-        this.exitIP.label.clutter_text.line_wrap = false;
 
         this.menu.addMenuItem(
             new PopupMenu.PopupSeparatorMenuItem()
@@ -277,31 +220,20 @@ class TorApplet extends Applet.IconApplet {
         );
 
         this.newIdentityButton = new PopupMenu.PopupIconMenuItem(
-            _("New Identity"), "view-refresh-symbolic", St.IconType.SYMBOLIC);
+            _("New Identity"), ICONS.NEW_IDENTITY, St.IconType.SYMBOLIC);
 
         this.menu.addMenuItem(this.newIdentityButton);
 
         this.testConnectionButton = new PopupMenu.PopupIconMenuItem(
-            _("Test Tor Connection"),
-            "network-workgroup-symbolic",
-            St.IconType.SYMBOLIC
-        );
+            _("Test Tor Connection"), ICONS.TEST_CONNECTION, St.IconType.SYMBOLIC);
 
         this.menu.addMenuItem(this.testConnectionButton);
 
-        this.testConnectionButton.connect(
-            "activate",
-            () => {
-                this.testTorConnection();
-            }
-        );
-
         this.testStatus = new PopupMenu.PopupIconMenuItem(
-            "Test : Not Run",
-            "xsi-network-wireless-hotspot-symbolic",
-            St.IconType.SYMBOLIC
-        );
+            _("Test : Not Run"), ICONS.TEST_STATUS, St.IconType.SYMBOLIC);
 
+        this.testStatus.label.set_style("color: white;");
+        this.testStatus._icon.set_style("color: white;");
         this.testStatus.setSensitive(false);
         this.menu.addMenuItem(this.testStatus);
 
@@ -309,12 +241,8 @@ class TorApplet extends Applet.IconApplet {
             new PopupMenu.PopupSeparatorMenuItem()
         );
 
-        this.settingsButton =
-            new PopupMenu.PopupIconMenuItem(
-                _("Preferences"),
-                "emblem-system-symbolic",
-                St.IconType.SYMBOLIC
-            );
+        this.settingsButton = new PopupMenu.PopupIconMenuItem(
+            _("Preferences"), ICONS.PREFS, St.IconType.SYMBOLIC);
 
         this.menu.addMenuItem(this.settingsButton);
 
@@ -345,6 +273,13 @@ class TorApplet extends Applet.IconApplet {
             }
         );
 
+        this.testConnectionButton.connect(
+            "activate",
+            () => {
+                this.testTorConnection();
+            }
+        );
+
         this.settingsButton.connect(
             "activate",
             () => {
@@ -353,6 +288,29 @@ class TorApplet extends Applet.IconApplet {
         );
 
         this.updateMenuVisibility();
+    }
+
+    _refreshMenuLayout() {
+        const children = this.menu.box.get_children();
+
+        for (const child of children) {
+            child.queue_relayout();
+
+            const delegate = child._delegate;
+
+            if (delegate && delegate.actor)
+                delegate.actor.queue_relayout();
+
+            if (delegate && delegate.label)
+                delegate.label.queue_relayout();
+        }
+
+        const widths = this.menu.getColumnWidths();
+
+        this.menu.setColumnWidths(widths);
+
+        this.menu.box.queue_relayout();
+        this.menu.actor.queue_relayout();
     }
 
     setBootstrapProgress(progress) {
@@ -365,11 +323,10 @@ class TorApplet extends Applet.IconApplet {
         this.exitIP.label.text =
             "Exit IP Address : Loading...";
 
-        this.menu.box.queue_relayout();
+        this._refreshMenuLayout();
     }
 
     pollBootstrap() {
-
         const client = new Gio.SocketClient();
 
         const address = Gio.NetworkAddress.new(
@@ -416,61 +373,20 @@ class TorApplet extends Applet.IconApplet {
     }
 
     authenticateBootstrap(info, output, input, connection) {
-
-        if (info.methods.includes("HASHEDPASSWORD") &&
-            this.controlPassword) {
-
-            this.sendCommand(
-                output,
-                `AUTHENTICATE "${this.controlPassword}"`
-            );
-
-            this.finishBootstrapAuthentication(
+        this.authenticateControl(
+            info,
+            output,
+            input,
+            connection,
+            () => this.finishBootstrapAuthentication(
                 output,
                 input,
                 connection
-            );
-
-            return;
-        }
-
-        if (info.methods.includes("COOKIE")) {
-
-            const file =
-                Gio.File.new_for_path(info.cookieFile);
-
-            try {
-
-                const [, bytes] =
-                    file.load_contents(null);
-
-                const hex =
-                    Array.from(bytes)
-                        .map(b => b.toString(16).padStart(2, "0"))
-                        .join("");
-
-                this.sendCommand(
-                    output,
-                    `AUTHENTICATE ${hex}`
-                );
-
-                this.finishBootstrapAuthentication(
-                    output,
-                    input,
-                    connection
-                );
-
-            } catch (e) {
-
-                global.logError(e);
-
-                connection.close(null);
-            }
-        }
+            )
+        );
     }
 
     finishBootstrapAuthentication(output, input, connection) {
-
         this.readResponse(input, lines => {
 
             if (!lines.some(l => l === "250 OK")) {
@@ -526,20 +442,52 @@ class TorApplet extends Applet.IconApplet {
         });
     }
 
-    updateMenuVisibility() {
-        this.exitCountry.actor.visible = this.showCountry;
-        this.exitCity.actor.visible = this.showCity;
-        this.exitIP.actor.visible = this.showIP;
+    authenticateControl(info, output, input, connection, onSuccess) {
+
+        switch (this.authMethod) {
+
+            case "password":
+                this.authenticatePassword(
+                    info,
+                    output,
+                    input,
+                    onSuccess
+                );
+                break;
+
+            case "cookie":
+                this.authenticateCookie(
+                    info,
+                    output,
+                    onSuccess
+                );
+                break;
+
+            case "safecookie":
+                this.authenticateSafeCookie(
+                    info,
+                    output,
+                    input,
+                    connection,
+                    onSuccess
+                );
+                break;
+
+            default:
+                this.authenticateAuto(
+                    info,
+                    output,
+                    input,
+                    connection,
+                    onSuccess
+                );
+        }
     }
 
     openSettings() {
         Util.spawnCommandLine(
             `xlet-settings applet ${this.metadata.uuid}`
         );
-    }
-
-    on_applet_clicked() {
-        this.menu.toggle();
     }
 
     isRunning(callback) {
@@ -563,28 +511,28 @@ class TorApplet extends Applet.IconApplet {
 
         this.set_applet_tooltip(
             running
-                ? "Tor : Connected"
-                : "Tor : Disconnected"
+                ? "Tor : Enabled"
+                : "Tor : Disabled"
         );
 
         if (this.torSwitch)
             this.torSwitch.setToggleState(running);
 
-        if (this.statusTitle) {
+        if (this.torStatus) {
 
             if (running) {
 
-                this.statusTitle.label.text =
-                    "Tor Status : Connected";
+                this.torStatus.label.text =
+                    "Tor Status : Enabled";
 
-                this.statusTitle.setIconName(ICONS.TOR_ON);
+                this.torStatus.setIconName(ICONS.TOR_ON);
 
             } else {
 
-                this.statusTitle.label.text =
-                    "Tor Status : Disconnected";
+                this.torStatus.label.text =
+                    "Tor Status : Disabled";
 
-                this.statusTitle.setIconName(ICONS.TOR_OFF);
+                this.torStatus.setIconName(ICONS.TOR_OFF);
             }
         }
     }
@@ -606,10 +554,10 @@ class TorApplet extends Applet.IconApplet {
                     "Tor : Not Installed"
                 );
 
-                this.statusTitle.label.text =
+                this.torStatus.label.text =
                     "Tor Status : Not Installed";
 
-                this.statusTitle.setIconName(ICONS.ERROR);
+                this.torStatus.setIconName(ICONS.ERROR);
 
                 this.torSwitch.setToggleState(false);
                 this.torSwitch.setSensitive(false);
@@ -630,7 +578,6 @@ class TorApplet extends Applet.IconApplet {
 
                 if (running)
                     this.updateExitInfo();
-                    // this.setBootstrapProgress(0);
                 else {
                     this.exitCountry.label.text = "Exit Country : Unavailable";
                     this.exitCity.label.text = "Exit City : Unavailable";
@@ -728,7 +675,6 @@ class TorApplet extends Applet.IconApplet {
                 }
 
                 this.setBootstrapProgress(0);
-                this.pollBootstrap();
 
                 GLib.timeout_add_seconds(
                     GLib.PRIORITY_DEFAULT,
@@ -773,14 +719,10 @@ class TorApplet extends Applet.IconApplet {
             null,
             (client, result) => {
 
-                global.log("Connect callback");
-
                 try {
 
                     const connection =
                         client.connect_finish(result);
-
-                    global.log("Connected to ControlPort");
 
                     const output =
                         connection.get_output_stream();
@@ -821,19 +763,17 @@ class TorApplet extends Applet.IconApplet {
 
     sendCommand(output, command) {
         try {
-            global.log(`>>> ${command}`);
 
             output.write_all(command + "\r\n", null);
             output.flush(null);
 
-            global.log("write complete");
-            global.log(`${this.torHost}:${this.controlPort}`);
         } catch (e) {
             global.logError(e);
         }
     }
 
     readResponse(input, callback) {
+
         let lines = [];
 
         const readNext = () => {
@@ -842,25 +782,26 @@ class TorApplet extends Applet.IconApplet {
                 GLib.PRIORITY_DEFAULT,
                 null,
                 (stream, res) => {
-                    global.log("read_line_async callback");
 
                     try {
-                        const [line] = stream.read_line_finish_utf8(res);
 
-                        global.log(`line=${JSON.stringify(line)}`);
+                        const [line] =
+                            stream.read_line_finish_utf8(res);
 
                         if (line === null) {
                             callback(lines);
                             return;
                         }
 
-                        const clean = line.replace(/\r$/, "");
+                        const clean =
+                            line.replace(/\r$/, "");
 
                         lines.push(clean);
 
-                        global.log(`<<< ${clean}`);
-
-                        if (clean === "250 OK" || clean.startsWith("5")) {
+                        if (
+                            clean === "250 OK" ||
+                            clean.startsWith("5")
+                        ) {
                             callback(lines);
                             return;
                         }
@@ -868,7 +809,9 @@ class TorApplet extends Applet.IconApplet {
                         readNext();
 
                     } catch (e) {
+
                         global.logError(e);
+
                     }
                 }
             );
@@ -894,37 +837,160 @@ class TorApplet extends Applet.IconApplet {
     }
 
     authenticate(info, output, input, connection) {
-
-        if (info.methods.includes("HASHEDPASSWORD") &&
-            this.controlPassword) {
-
-            this.sendCommand(
-                output,
-                `AUTHENTICATE "${this.controlPassword}"`
-            );
-
-            this.finishAuthentication(output, input, connection);
-
-            return;
-        }
-
-        if (info.methods.includes("COOKIE")) {
-            this.authenticateCookie(
-                info.cookieFile,
-                output,
-                input,
-                connection
-            );
-            return;
-        }
-
-        throw new Error("No supported authentication method.");
+        this.authenticateControl(
+            info,
+            output,
+            input,
+            connection,
+            () => this.finishAuthentication(output, input, connection)
+        );
     }
 
-    authenticateCookie(path, output, input, connection) {
-        const file = Gio.File.new_for_path(path);
+    authenticatePassword(info, output, input, onSuccess) {
+
+        if (!info.methods.includes("HASHEDPASSWORD"))
+            throw new Error("Password authentication not supported.");
+
+        this.sendCommand(
+            output,
+            `AUTHENTICATE "${this.controlPassword}"`
+        );
+
+        this.readResponse(input, lines => {
+
+            if (lines.includes("250 OK"))
+                onSuccess();
+            else
+                global.logError("AUTHENTICATE failed");
+
+        });
+    }
+
+    authenticateSafeCookie(info, output, input, connection, onSuccess) {
+        if (!info.methods.includes("SAFECOOKIE"))
+            throw new Error("SAFECOOKIE authentication not supported.");
+
+        if (!info.cookieFile)
+            throw new Error("Tor did not provide a COOKIEFILE.");
+
+        const file = Gio.File.new_for_path(info.cookieFile);
+
+        let cookie;
 
         try {
+            [, cookie] = file.load_contents(null);
+        } catch (e) {
+            throw new Error(
+                `Failed to read Tor authentication cookie: ${info.cookieFile}`
+            );
+        }
+
+        const clientNonce = this.randomBytes(32);
+
+        this.sendCommand(
+            output,
+            `AUTHCHALLENGE SAFECOOKIE ${this.bytesToHex(clientNonce)}`
+        );
+
+        this.readResponse(input, lines => {
+
+            const reply = lines.join("\n");
+
+            const serverHash =
+                reply.match(/SERVERHASH=([0-9A-F]+)/)?.[1];
+
+            const serverNonce =
+                reply.match(/SERVERNONCE=([0-9A-F]+)/)?.[1];
+
+            if (!serverHash || !serverNonce) {
+                connection.close(null);
+                throw new Error("Invalid SAFECOOKIE response.");
+            }
+
+            this.computeSafeCookieClientHash(
+                cookie,
+                clientNonce,
+                this.hexToBytes(serverNonce),
+                clientHash => {
+
+                    if (!clientHash) {
+                        connection.close(null);
+                        return;
+                    }
+
+                    this.sendCommand(
+                        output,
+                        `AUTHENTICATE ${clientHash}`
+                    );
+
+                    onSuccess();
+                }
+            );
+        });
+    }
+
+    computeSafeCookieClientHash(
+        cookie,
+        clientNonce,
+        serverNonce,
+        callback
+    ) {
+        const prefix =
+            "Tor safe cookie authentication controller-to-server hash";
+
+        const encoder = new TextEncoder();
+        const prefixBytes = encoder.encode(prefix);
+
+        const message = new Uint8Array(
+            prefixBytes.length +
+            clientNonce.length +
+            serverNonce.length
+        );
+
+        message.set(prefixBytes, 0);
+        message.set(clientNonce, prefixBytes.length);
+        message.set(
+            serverNonce,
+            prefixBytes.length + clientNonce.length
+        );
+
+        const cookieHex = this.bytesToHex(cookie);
+
+        const [, tmpfile] = GLib.file_open_tmp("tor-safecookie-XXXXXX");
+
+        GLib.file_set_contents(tmpfile, message);
+
+        const cmd =
+            `openssl dgst -sha256 \
+             -mac HMAC \
+             -macopt hexkey:${cookieHex} \
+             -binary < "${tmpfile}" | xxd -p -c 256`;
+
+        Util.spawnCommandLineAsyncIO(
+            cmd,
+            (stdout, stderr, exitCode) => {
+
+                GLib.unlink(tmpfile);
+
+                if (exitCode !== 0) {
+                    global.logError(stderr);
+                    callback(null);
+                    return;
+                }
+
+                callback(stdout.trim().toUpperCase());
+            }
+        );
+    }
+
+    authenticateCookie(info, output, onSuccess) {
+        if (!info.methods.includes("COOKIE"))
+            throw new Error("Cookie authentication not supported.");
+
+        const file = Gio.File.new_for_path(info.cookieFile);
+
+        try {
+
             const [, bytes] = file.load_contents(null);
 
             const hex = Array.from(bytes)
@@ -933,12 +999,53 @@ class TorApplet extends Applet.IconApplet {
 
             this.sendCommand(output, `AUTHENTICATE ${hex}`);
 
-            this.finishAuthentication(output, input, connection);
+            onSuccess();
 
         } catch (e) {
+
             global.logError(e);
-            connection.close(null);
+
+            throw new Error(
+                `Failed to read Tor authentication cookie: ${info.cookieFile}`
+            );
         }
+    }
+
+    authenticateAuto(info, output, input, connection, onSuccess) {
+        if (
+            info.methods.includes("HASHEDPASSWORD") &&
+            this.controlPassword
+        ) {
+            this.authenticatePassword(
+                info,
+                output,
+                input,
+                onSuccess
+            );
+            return;
+        }
+
+        if (info.methods.includes("SAFECOOKIE")) {
+            this.authenticateSafeCookie(
+                info,
+                output,
+                input,
+                connection,
+                onSuccess
+            );
+            return;
+        }
+
+        if (info.methods.includes("COOKIE")) {
+            this.authenticateCookie(
+                info,
+                output,
+                onSuccess
+            );
+            return;
+        }
+
+        throw new Error("No supported authentication method.");
     }
 
     finishAuthentication(output, input, connection) {
@@ -976,6 +1083,30 @@ class TorApplet extends Applet.IconApplet {
         });
     }
 
+    randomBytes(length) {
+        const bytes = new Uint8Array(length);
+
+        for (let i = 0; i < length; i++)
+            bytes[i] = GLib.random_int_range(0, 256);
+
+        return bytes;
+    }
+
+    bytesToHex(bytes) {
+        return Array.from(bytes)
+            .map(b => b.toString(16).padStart(2, "0"))
+            .join("");
+    }
+
+    hexToBytes(hex) {
+        const bytes = new Uint8Array(hex.length / 2);
+
+        for (let i = 0; i < bytes.length; i++)
+            bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+
+        return bytes;
+    }
+
     updateExitInfo() {
         if (!this.exitIP)
             return;
@@ -988,10 +1119,6 @@ class TorApplet extends Applet.IconApplet {
             (stdout, stderr, exitCode) => {
 
                 if (exitCode !== 0 || !stdout) {
-
-                    global.log(
-                        `exit=${exitCode}\nstdout=${stdout}\nstderr=${stderr}`
-                    );
 
                     global.logError(
                         `Exit lookup failed (${exitCode}): ${stderr}`
@@ -1025,7 +1152,7 @@ class TorApplet extends Applet.IconApplet {
 
                     this.exitCountry.label.text =
                         `Exit Country : ${country}`;
-
+                        
                     this.exitCity.label.text =
                         `Exit City : ${city}`;
 
@@ -1035,8 +1162,7 @@ class TorApplet extends Applet.IconApplet {
                     if (!this.testStatus.label.text.includes(ip))
                         this.testStatus.label.text = "Test : Not Tested";
 
-                    this.menu.box.queue_relayout();
-                    this.menu.box.queue_relayout();
+                    this._refreshMenuLayout();
 
                 } catch(e) {
 
@@ -1108,9 +1234,8 @@ class TorApplet extends Applet.IconApplet {
     }
 
     on_applet_removed_from_panel() {
-        if (this._refreshTimer) {
+        if (this._refreshTimer)
             GLib.Source.remove(this._refreshTimer);
-        }
 
         this.settings.finalize();
 
