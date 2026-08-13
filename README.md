@@ -2,6 +2,8 @@
 
 A Cinnamon desktop applet that provides quick access to the Tor service, allowing you to manage Tor, configure the system SOCKS proxy, request a new Tor identity, and view information about your current Tor exit node directly from the panel.
 
+<img width="340" height="384" alt="Screenshot from 2026-08-13 11-55-20" src="https://github.com/user-attachments/assets/177d4b23-0a0a-4406-9fa0-a0e1cc370b2a" />
+
 ## Features
 
 - Toggle the Tor service on or off.
