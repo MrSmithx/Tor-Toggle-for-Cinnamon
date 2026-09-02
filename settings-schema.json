@@ -57,7 +57,7 @@
 
     "privacySection": {
       "type": "section",
-      "title": "",
+      "title": "Exit Node",
       "keys": [
         "showCountry",
         "showCity",
@@ -115,19 +115,19 @@
   "showCountry": {
       "type": "switch",
       "default": true,
-      "description": "Show Exit Country"
+      "description": "Show Country"
   },
 
   "showCity": {
       "type": "switch",
       "default": true,
-      "description": "Show Exit City"
+      "description": "Show City"
   },
 
   "showIP": {
       "type": "switch",
       "default": true,
-      "description": "Show Exit IP Address"
+      "description": "Show IP Address"
   },
 
   "mask-octet-1": {
@@ -213,6 +213,6 @@
 
   "authLabel": {
     "type": "label",
-    "description": "- 'Automatic' will try 'Cookie' > 'SafeCookie' > 'Password' (if 'Password' is set).\n- Cookie and SafeCookie require read access to '/run/tor/control.authcookie'.\n- Use command 'tor --hash-password <your_password>' to generate your Tor Hash Password.\n- Make sure your Hash Password is updated in your 'torrc' file."
+    "description": "- 'Automatic' will try 'Cookie' > 'SafeCookie' > 'Password' (if 'Password' is set).\n- 'torrc' file must use 'HashedControlPassword' or 'CookieAuthentication' as required.\n- Cookie and SafeCookie require read access to '/run/tor/control.authcookie'.\n- Ensure current user is a member of the 'debian-tor' group.\n- Use command 'tor --hash-password <your_password>' to generate your Tor Hash Password.\n- Make sure your Hash Password is updated in your 'torrc' file."
   }
 }
