@@ -76,8 +76,8 @@ class TorApplet extends Applet.IconApplet {
 
         const menuWidth = 360;
 
-        this.menu.box.set_style(`width: ${menuWidth}px;`);
-        this.menu.actor.set_style(`width: ${menuWidth}px;`);
+        this.menu.box.set_width(menuWidth);
+        this.menu.actor.set_width(menuWidth);
         
         this.menuManager = new PopupMenu.PopupMenuManager(this);
         this.menuManager.addMenu(this.menu);
@@ -177,21 +177,15 @@ class TorApplet extends Applet.IconApplet {
             ICONS.COUNTRY_LOC
         );
 
-        this.setMenuItemFullWidth(this.exitCountry);
-
         this.exitCity = this.addStatusItem(
             "Exit City : Checking...",
             ICONS.CITY_LOC
         );
 
-        this.setMenuItemFullWidth(this.exitCity);
-
         this.exitIP = this.addStatusItem(
             "Exit IP Address : Checking...",
             ICONS.IP
         );
-
-        this.setMenuItemFullWidth(this.exitIP);
 
         this.menu.addMenuItem(
             new PopupMenu.PopupSeparatorMenuItem()
@@ -225,13 +219,10 @@ class TorApplet extends Applet.IconApplet {
 
         this.menu.addMenuItem(this.testConnectionBtn);
 
-        this.testStatus = new PopupMenu.PopupIconMenuItem(
-            _("Test : Not Run"), ICONS.TEST_STATUS, St.IconType.SYMBOLIC);
-
-        this.testStatus.label.set_style("color: white;");
-        this.testStatus._icon.set_style("color: white;");
-        this.testStatus.setSensitive(false);
-        this.menu.addMenuItem(this.testStatus);
+        this.testStatus = this.addStatusItem(
+            "Test : Not Tested",
+            ICONS.IP
+        );
 
         this.menu.addMenuItem(
             new PopupMenu.PopupSeparatorMenuItem()
@@ -304,67 +295,16 @@ class TorApplet extends Applet.IconApplet {
         item._icon.set_style("color: white;");
         item.setSensitive(false);
 
+        item.label.set_width(200); // set Label Width!
+
         this.menu.addMenuItem(item);
 
         return item;
     }
 
-    setMenuItemFullWidth(item) {
-        const actor = item.actor;
-
-        actor.set_x_expand(true);
-        actor.set_x_align(Clutter.ActorAlign.FILL);
-
-        if (item._icon) {
-            item._icon.set_x_expand(false);
-        }
-
-        if (item.label) {
-            item.label.set_x_expand(true);
-            item.label.set_x_align(Clutter.ActorAlign.START);
-            item.label.set_width(-1);
-        }
-
-        item.actor.queue_relayout();
-
-        const children = actor.get_children();
-
-        for (const child of children) {
-            child.set_x_expand(true);
-
-            if (child === item._icon)
-                child.set_x_expand(false);
-        }
-
-        actor.queue_relayout();
-    }
-
     _refreshMenuLayout() {
         this.menu.box.queue_relayout();
         this.menu.actor.queue_relayout();
-
-        for (const child of this.menu.box.get_children()) {
-            child.set_x_expand(true);
-            //child.set_x_align(Clutter.ActorAlign.FILL);
-            child.queue_relayout();
-
-            const delegate = child._delegate;
-
-            if (!delegate)
-                continue;
-
-            if (delegate.actor) {
-                delegate.actor.set_x_expand(true);
-                delegate.actor.set_x_align(Clutter.ActorAlign.FILL);
-                delegate.actor.queue_relayout();
-            }
-
-            if (delegate.label) {
-                delegate.label.set_x_expand(true);
-                delegate.label.set_x_align(Clutter.ActorAlign.START);
-                delegate.label.queue_relayout();
-            }
-        }
     }
 
     validatePort(value, name) {
@@ -403,7 +343,6 @@ class TorApplet extends Applet.IconApplet {
 
         const password = String(value);
 
-        // Tor's quoted AUTHENTICATE form needs escaping.
         if (/[\r\n]/.test(password))
             throw new Error("Tor control password cannot contain newlines.");
 
@@ -475,8 +414,8 @@ class TorApplet extends Applet.IconApplet {
         const client = new Gio.SocketClient();
 
         const address = Gio.NetworkAddress.new(
-            this.host,
-            this.controlPort
+            config.host,
+            config.controlPort
         );
 
         client.connect_async(address, null, (client, result) => {
@@ -502,7 +441,7 @@ class TorApplet extends Applet.IconApplet {
                     const info =
                         this.parseProtocolInfo(lines);
 
-                    this.authenticateBootstrap(
+                    this.authenticate(
                         info,
                         output,
                         input,
@@ -515,20 +454,6 @@ class TorApplet extends Applet.IconApplet {
                 global.logError(e);
             }
         });
-    }
-
-    authenticateBootstrap(info, output, input, connection) {
-        this.authenticateControl(
-            info,
-            output,
-            input,
-            connection,
-            () => this.finishBootstrapAuthentication(
-                output,
-                input,
-                connection
-            )
-        );
     }
 
     finishBootstrapAuthentication(output, input, connection) {
@@ -585,48 +510,6 @@ class TorApplet extends Applet.IconApplet {
                 );
             });
         });
-    }
-
-    authenticateControl(info, output, input, connection, onSuccess) {
-
-        switch (this.authMethod) {
-
-            case "password":
-                this.authenticatePassword(
-                    info,
-                    output,
-                    input,
-                    onSuccess
-                );
-                break;
-
-            case "cookie":
-                this.authenticateCookie(
-                    info,
-                    output,
-                    onSuccess
-                );
-                break;
-
-            case "safecookie":
-                this.authenticateSafeCookie(
-                    info,
-                    output,
-                    input,
-                    connection,
-                    onSuccess
-                );
-                break;
-
-            default:
-                this.authenticateAuto(
-                    info,
-                    output,
-                    input,
-                    connection,
-                    onSuccess
-                );
-        }
     }
 
     openSettings() {
@@ -773,12 +656,12 @@ class TorApplet extends Applet.IconApplet {
 
         this.socksSettings.set_string(
             "host",
-            this.host
+            config.host
         );
 
         this.socksSettings.set_int(
             "port",
-            this.socksPort
+            config.socksPort
         );
 
         return true;
@@ -1006,13 +889,53 @@ class TorApplet extends Applet.IconApplet {
         };
     }
 
-    authenticate(info, output, input, connection) {
-        this.authenticateControl(
+    authenticate(info, output, input, connection, onSuccess) {
+        if (typeof onSuccess !== "function")
+            onSuccess = () => this.finishAuthentication(
+                output,
+                input,
+                connection
+            );
+
+        const method = this.authMethod;
+
+        if (method === "password") {
+            this.authenticatePassword(
+                info,
+                output,
+                input,
+                onSuccess
+            );
+            return;
+        }
+
+        if (method === "cookie") {
+            this.authenticateCookie(
+                info,
+                output,
+                input,
+                onSuccess
+            );
+            return;
+        }
+
+        if (method === "safecookie") {
+            this.authenticateSafeCookie(
+                info,
+                output,
+                input,
+                connection,
+                onSuccess
+            );
+            return;
+        }
+
+        this.authenticateAuto(
             info,
             output,
             input,
             connection,
-            () => this.finishAuthentication(output, input, connection)
+            onSuccess
         );
     }
 
@@ -1159,7 +1082,7 @@ class TorApplet extends Applet.IconApplet {
         }
     }
 
-    authenticateCookie(info, output, onSuccess) {
+    authenticateCookie(info, output, input, onSuccess) {
         if (!info.methods.includes("COOKIE"))
             throw new Error("Cookie authentication not supported.");
 
@@ -1222,6 +1145,7 @@ class TorApplet extends Applet.IconApplet {
             this.authenticateCookie(
                 info,
                 output,
+                input,
                 onSuccess
             );
             return;
@@ -1266,12 +1190,10 @@ class TorApplet extends Applet.IconApplet {
     }
 
     randomBytes(length) {
-        const bytes = new Uint8Array(length);
-
-        for (let i = 0; i < length; i++)
-            bytes[i] = GLib.random_int_range(0, 256);
-
-        return bytes;
+        return Uint8Array.from(
+            { length },
+            () => GLib.random_int_range(0, 256)
+        );
     }
 
     bytesToHex(bytes) {
@@ -1281,12 +1203,10 @@ class TorApplet extends Applet.IconApplet {
     }
 
     hexToBytes(hex) {
-        const bytes = new Uint8Array(hex.length / 2);
-
-        for (let i = 0; i < bytes.length; i++)
-            bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
-
-        return bytes;
+        return Uint8Array.from(
+            { length: hex.length / 2 },
+            (_, i) => parseInt(hex.slice(i * 2, i * 2 + 2), 16)
+        );
     }
 
     updateExitInfo() {
